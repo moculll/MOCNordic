@@ -31,7 +31,7 @@ int MOCNordicHIDevice::deviceUnitInit(uint8_t index, ReportDesc &desc)
         DEBUG_PRINT("index outof range, check.");
         return -1;
     }
-    k_mutex_lock(&initMutex, K_MSEC(5000));
+   
     if(deviceUnits[index].device) {
         usb_disable();
         for(int i = 0; i < static_cast<int>(deviceUnits.size()); i++) {
@@ -61,7 +61,7 @@ int MOCNordicHIDevice::deviceUnitInit(uint8_t index, ReportDesc &desc)
         }
 
         int ret = usb_enable(NULL);
-        k_mutex_unlock(&initMutex);
+      
         
         return ret;
     }

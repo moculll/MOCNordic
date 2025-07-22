@@ -36,13 +36,14 @@ public:
     void init()
     {
         auto index = MOCNordic::MOCNordicBLEMgr::getAvailableIndex();
+        DEBUG_PRINT("get available index: %d", index);
         MOCNordic::MOCNordicBLEMgr::registerGetReportMapCallbackToIndex(index, [this, index](uint8_t *data, uint32_t length) {
             MOCNordic::ReportDesc desc;
             desc.clear();
             desc.insert(data, length, MOCNordic::ReportDescType::UNKNOWN);
             
             
-            MOCNordic::MOCNordicHIDevice::deviceUnitInit(0, desc);
+            MOCNordic::MOCNordicHIDevice::deviceUnitInit(index, desc);
             k_sem_give(&connectSem);
             
         });
@@ -86,11 +87,22 @@ int main(void)
         DEBUG_PRINT("moc nordic hid init successful.");
     }
 
-    BLEDevice device("Brydge C-Touch");
-    device.init();
-    device.connect();
-    device.waitForConnect(2000000);
-    DEBUG_PRINT("device connected.");
+    BLEDevice touchPadDevice("Brydge C-Touch");
+    touchPadDevice.init();
+    touchPadDevice.connect();
+    touchPadDevice.waitForConnect(2000000);
+
+    BLEDevice mouseDevice("Mouse");
+    mouseDevice.init();
+    mouseDevice.connect();
+    mouseDevice.waitForConnect(2000000);
+
+    BLEDevice keyboardDevice("Keyboard");
+    keyboardDevice.init();
+    keyboardDevice.connect();
+    keyboardDevice.waitForConnect(2000000);
+
+    DEBUG_PRINT("all device connected.");
     while(1) {
         
         k_msleep(1000000000);

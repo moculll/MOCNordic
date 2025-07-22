@@ -199,35 +199,36 @@ void MOCNordicBLEMgr::ServiceNotFound(struct bt_conn *conn, void *context) {
     uint8_t index = bt_conn_index(conn);
 
     /* we update param until discovery done because timeout would effect discover speed */
-    static struct bt_le_conn_param conn_param = {
-        .interval_min = 6, /* Minimum Connection Interval (interval_min * 1.25 ms) */
-        .interval_max = 6, /* Maximum Connection Interval (interval_max * 1.25 ms) */
+    /* update param in the end, otherwise service discovery slow */
+    /* some keyboard with lower interval cause key delay, so just use connect param */
+    /* static struct bt_le_conn_param conn_param = {
+        .interval_min = 6,
+        .interval_max = 6,
         .latency = 0,
-        .timeout = 50, /* Supervision Timeout (timeout * 10 ms) */
+        .timeout = 50,
     };
 
-    /* update param in the end, otherwise service discovery slow */
     int zephyr_err = bt_conn_le_param_update(conn, &conn_param);
 
     if (zephyr_err) {
         DEBUG_PRINT("bt_conn_le_param_update failed (err %d)", zephyr_err);
     }
-    else {
-        DEBUG_PRINT("updated conn param successful, timeoutMs: %d", conn_param.timeout * 10);
-        
-        auto &unit = PeripheralSequence[index];
-        unit.subscribed = 1;
+    
+    DEBUG_PRINT("timeoutMs: %d", conn_param.timeout * 10); */
+    
+    auto &unit = PeripheralSequence[index];
+    unit.subscribed = 1;
 
-        int err = bt_gatt_read(unit.conn, &unit.reportMapReadParams);
-        if (err) {
-            DEBUG_PRINT("Report Map read failed (err %d)", err);
-        }
-        
-        unit.linkTimeMs = k_uptime_get() - unit.linkTimeMs;
-        double testTime = static_cast<double>(unit.linkTimeMs) / 1000.0;
-        DEBUG_PRINT("[TEST] total time: %.2fs", testTime);
-        
+    int err = bt_gatt_read(unit.conn, &unit.reportMapReadParams);
+    if (err) {
+        DEBUG_PRINT("Report Map read failed (err %d)", err);
     }
+    
+    unit.linkTimeMs = k_uptime_get() - unit.linkTimeMs;
+    double testTime = static_cast<double>(unit.linkTimeMs) / 1000.0;
+    DEBUG_PRINT("[TEST] total time: %.2fs", testTime);
+    
+
 
     
 }
@@ -568,8 +569,13 @@ int MOCNordicBLEMgr::setScanTarget(const std::string_view &generalName)
     int err = 0;
     err = bt_scan_filter_add(BT_SCAN_FILTER_TYPE_NAME, generalName.data());
 	if (err) {
-		DEBUG_PRINT("Set filter on device address error: %d", err);
+		DEBUG_PRINT("Set name filter error: %d", err);
 	}
+    else {
+        auto index = getAvailableIndex();
+        PeripheralSequence[index].reset();
+        PeripheralSequence[index].occupied = 1;
+    }
     return err;
 }
 

@@ -1,6 +1,6 @@
 {
 
     "C_Cpp.default.compileCommands": "${workspaceFolder}/build/${workspaceFolderBasename}/compile_commands.json",
-    "C_Cpp.autoAddFileAssociations": false,
+
     
 }
