@@ -20,69 +20,81 @@
 
 LOG_MODULE_REGISTER(main, CONFIG_LOG_DEFAULT_LEVEL);
 
-static void getReportMapDev0(uint8_t *data, uint32_t length)
-{
-    MOCNordic::ReportDesc desc;
-    desc.clear();
-    desc.insert(data, length, MOCNordic::ReportDescType::UNKNOWN);
-
-    MOCNordic::MOCNordicHIDevice::deviceUnitInit(0, desc);
-    DEBUG_PRINT("registered hid devcie 0");
-
-}
-
-
-static void getNotifyDev0(uint8_t *data, uint32_t length)
-{
-    if(!length || !data)
-        return;
-
-    MOCNordic::MOCNordicHIDevice::writeToDevice(0, data, length);
-
-}
-
-static void button_handler(uint32_t button_state, uint32_t has_changed)
-{
-	uint32_t button = button_state & has_changed;
-    if(DK_BTN1_MSK & button) {
-        DEBUG_PRINT("button pressed.");
-
-    }
-    else {
-        DEBUG_PRINT("button released.");
-
-
+class BLEDevice {
+public:
+    explicit BLEDevice(std::string_view deviceName) : name(deviceName)
+    {
+        k_sem_init(&connectSem, 0, 1);
     }
 
-}
+    void connect()
+    {
+        MOCNordic::MOCNordicBLEMgr::setScanTarget(name);
+    }
+
+
+    void init()
+    {
+        auto index = MOCNordic::MOCNordicBLEMgr::getAvailableIndex();
+        MOCNordic::MOCNordicBLEMgr::registerGetReportMapCallbackToIndex(index, [this, index](uint8_t *data, uint32_t length) {
+            MOCNordic::ReportDesc desc;
+            desc.clear();
+            desc.insert(data, length, MOCNordic::ReportDescType::UNKNOWN);
+            
+            
+            MOCNordic::MOCNordicHIDevice::deviceUnitInit(0, desc);
+            k_sem_give(&connectSem);
+            
+        });
+
+        MOCNordic::MOCNordicBLEMgr::registerNotifyToIndex(index, [index](uint8_t *data, uint32_t length){
+            if(!length || !data)
+                return;
+
+            MOCNordic::MOCNordicHIDevice::writeToDevice(index, data, length);
+
+        });
+    }
+
+    void waitForConnect(uint32_t timeoutMs)
+    {
+        k_sem_take(&connectSem, K_MSEC(timeoutMs));
+    }
+
+
+private:
+    const std::string name;
+    struct k_sem connectSem;
+    
+};
 
 int main(void)
 {
     
-
-	if(!MOCNordic::MOCNordicBLEMgr::BLEStackInit()) {
-        DEBUG_PRINT("mt nordic ble stack init successful.");
-    }
-
-    int err = dk_buttons_init(button_handler);
+    /* int err = dk_buttons_init(button_handler);
     
 	if (err) {
 		DEBUG_PRINT("Failed to initialize buttons (err %d)", err);
 		return 0;
-	}
+    } */
 
-    if(!MOCNordic::MOCNordicHIDevice::init()) {
-        DEBUG_PRINT("mt nordic hid init successful.");
+	if(!MOCNordic::MOCNordicBLEMgr::BLEStackInit()) {
+        DEBUG_PRINT("moc nordic ble stack init successful.");
     }
 
-    MOCNordic::MOCNordicBLEMgr::registerGetReportMapCallbackToIndex(0, getReportMapDev0);
-    MOCNordic::MOCNordicBLEMgr::registerNotifyToIndex(0, getNotifyDev0);
+    if(!MOCNordic::MOCNordicHIDevice::init()) {
+        DEBUG_PRINT("moc nordic hid init successful.");
+    }
 
+    BLEDevice device("Brydge C-Touch");
+    device.init();
+    device.connect();
+    device.waitForConnect(2000000);
+    DEBUG_PRINT("device connected.");
     while(1) {
-
-        MOCNordic::MOCNordicBLEMgr::setScanTarget("LANGTU BT5.0_1");
         
         k_msleep(1000000000);
 
     }
+
 }

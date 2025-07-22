@@ -26,11 +26,87 @@ enum class ReportDescType {
     UNKNOWN,
 };
 
+
+
 struct ReportDesc {
-    inline static uint8_t reportCnt[] = {0x0D, 0x05};
+
+    struct TouchpadRecRet {
+        uint8_t fingerCnt;
+        uint8_t contactCountReportId;
+        bool isValid()
+        {
+            return (fingerCnt && contactCountReportId);
+        }
+        TouchpadRecRet() : fingerCnt(0), contactCountReportId(0) {}
+    };
+
+    /**
+     * @brief touchpad won't be available in usb hid if we don't answer the max contact count report
+     */
+    TouchpadRecRet touchpadRec()
+    {
+        TouchpadRecRet ret;
+        auto length = getDescLength();
+        uint32_t index = 0;
+        uint8_t *dataPtr = desc.data();
+
+        uint8_t reportId = 0;
+       
+        while(index < length) {
+            uint8_t itemTag = dataPtr[index] & (((0x0FU) << (4U)) | ((0x03U) << (2U)));
+            uint8_t itemSize = ((uint8_t)(dataPtr[index] & (0x03U<<(0U))) == (3U) ? 4 : (uint8_t)(dataPtr[index] & (0x03U<<(0U))));
+            if(index + itemSize >= length)
+                break;
+
+            int32_t itemData = 0;
+
+            if(itemSize == 1)
+                itemData = dataPtr[index + 1];
+            else if(itemSize == 2)
+                itemData = *((int16_t *)(&dataPtr[index + 1]));
+            else if(itemSize == 4)
+                itemData = *((int32_t *)(&dataPtr[index + 1]));
+
+            /* usage */
+            if((itemTag & (0x03U<<(2U))) == (0x02U<<(2U))) {
+                /* touchpad, currently only support one touchpad */
+                if(itemData == 0x05) {
+                    ret.fingerCnt = 0;
+                }
+
+                /* finger */
+                if(itemData == 0x22) {
+                    ++ret.fingerCnt;
+                }
+
+                if(itemData == 0x55) {
+                    ret.contactCountReportId = reportId;
+                }
+            }
+            /* reportId */
+            else if((itemTag & (0x03U<<(2U))) == (0x01U<<(2U))) {
+                if(itemTag == ((0x01U<<(2U))|(0x08U<<(4U))|((uint8_t)0&(0x03U<<(0U))))) {
+                    reportId = itemData;
+                    
+                }
+            }
+
+            index += (itemSize + 1);
+            
+        }
+        if(ret.contactCountReportId && ret.fingerCnt) {
+            setType(0, ReportDescType::Touchpad);
+        }
+        return ret;
+    }
+
+    /* reportId, cnt */
+    std::array<uint8_t, 2> reportContactCnt;
+
+    /* first byte reportId */
     inline static uint8_t reportCertIn[] =
     {
-        0x0C, 0xfc, 0x28, 0xfe, 0x84, 0x40, 0xcb, 0x9a, 0x87, 0x0d, 0xbe, 0x57, 0x3c, 0xb6, 0x70, 0x09, 0x88, 0x07, 0x97, 0x2d, 0x2b, 0xe3, 0x38, 0x34, 0xb6, 0x6c, 0xed, 0xb0, 0xf7, 0xe5, 0x9c, 0xf6,0xc2, 
+        0x00, 0xfc, 0x28, 0xfe, 0x84, 0x40, 0xcb, 0x9a, 0x87, 0x0d, 0xbe, 0x57, 0x3c, 0xb6, 0x70, 0x09, 0x88, 0x07, 0x97, 0x2d, 0x2b, 0xe3, 0x38, 0x34, 0xb6, 0x6c, 0xed, 0xb0, 0xf7, 0xe5, 0x9c, 0xf6,0xc2, 
         0x2e, 0x84, 0x1b, 0xe8, 0xb4, 0x51, 0x78, 0x43, 0x1f, 0x28, 0x4b, 0x7c, 0x2d, 0x53, 0xaf, 0xfc, 0x47, 0x70, 0x1b, 0x59, 0x6f, 0x74, 0x43, 0xc4, 0xf3, 0x47, 0x18, 0x53, 0x1a, 0xa2, 0xa1,0x71, 
         0xc7, 0x95, 0x0e, 0x31, 0x55, 0x21, 0xd3, 0xb5, 0x1e, 0xe9, 0x0c, 0xba, 0xec, 0xb8, 0x89, 0x19, 0x3e, 0xb3, 0xaf, 0x75, 0x81, 0x9d, 0x53, 0xb9, 0x41, 0x57, 0xf4, 0x6d, 0x39, 0x25, 0x29,0x7c, 
         0x87, 0xd9, 0xb4, 0x98, 0x45, 0x7d, 0xa7, 0x26, 0x9c, 0x65, 0x3b, 0x85, 0x68, 0x89, 0xd7, 0x3b, 0xbd, 0xff, 0x14, 0x67, 0xf2, 0x2b, 0xf0, 0x2a, 0x41, 0x54, 0xf0, 0xfd, 0x2c, 0x66, 0x7c,0xf8, 
@@ -49,28 +125,15 @@ struct ReportDesc {
     /* spp + reportMap may not over 512 bytes, use vector will cause memory error */
     std::array<uint8_t, 768> desc;
     
-    template <size_t N>
-    static uint8_t findTouchpadReportID(const std::array<uint8_t, N>& descriptor) {
-        uint8_t currentReportID = 0x00;
-
-        for (size_t i = 0; i + 1 < N; ++i) {
-            // 查找 Usage (0x09) 后面跟着 Usage (Touchpad, 0x05)
-            if (descriptor[i] == 0x09 && descriptor[i + 1] == 0x05) {
-                // 向后查找最近的 Report ID (0x85)
-                for (size_t j = i + 2; j + 1 < N; ++j) {
-                    if (descriptor[j] == 0x85) {
-                        // 返回 0x85 后面的字节作为 report ID
-                        return descriptor[j + 1];
-                    }
-                    
-                    
-                }
-            }
-        }
-
-        return 0x00; // 没找到 Touchpad 的 report ID
+    ReportDescType getType(uint8_t index)
+    {
+        return storageSequence[index].type;
     }
 
+    void setType(uint8_t index, ReportDescType type)
+    {
+        storageSequence[index].type = type;
+    }
 
     uint8_t *data()
     {
@@ -285,7 +348,7 @@ public:
 
     static int writeToDevice(uint8_t index, uint8_t *data, uint32_t length);
     static int writeToDevice(uint8_t index, uint8_t reportId, uint8_t *data, uint32_t length);
-    
+    static void printDesc(uint8_t index);
     /* int create(uint8_t index); */
 
 private:

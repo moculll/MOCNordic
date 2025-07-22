@@ -41,6 +41,16 @@ public:
 
     static int setScanTarget(const std::string_view &generalName);
 
+    static int getAvailableIndex()
+    {
+        for(int i = 0; i < static_cast<int>(PeripheralSequence.size()); i++) {
+            auto &unit = PeripheralSequence[i];
+            if(unit.empty())
+                return i;
+        }
+        return -1;
+        
+    }
     
 
     static void printSequenceInfo();
@@ -59,14 +69,14 @@ public:
         struct bt_gatt_dm_cb dm_cb;
     };
 
-    static void registerGetReportMapCallbackToIndex(unsigned int index, void (*callback)(uint8_t *data, uint32_t length))
+    static void registerGetReportMapCallbackToIndex(unsigned int index, std::function<void(uint8_t *, uint32_t)> callback)
     {
         if(index > PeripheralSequence.size() - 1)
             return;
         PeripheralSequence[index].getReportMapCallback = callback;
     }
 
-    static void registerNotifyToIndex(unsigned int index, void (*callback)(uint8_t *data, uint32_t length))
+    static void registerNotifyToIndex(unsigned int index, std::function<void(uint8_t *, uint32_t)> callback)
     {
         if(index > PeripheralSequence.size() - 1)
             return;
@@ -130,8 +140,10 @@ private:
         std::unordered_map<uint16_t, uint8_t> charHandleReportIdMap;
         std::unordered_map<uint16_t, uint16_t> refHandleCharHandleMap;
         uint32_t reportMapLength;
-        void (*getReportMapCallback)(uint8_t *data, uint32_t length);
-        void (*getNotifyCallback)(uint8_t *data, uint32_t length);
+        std::function<void(uint8_t *, uint32_t)> getReportMapCallback;
+        std::function<void(uint8_t *, uint32_t)> getNotifyCallback;
+        /* void (*getReportMapCallback)(uint8_t *data, uint32_t length); */
+        /* void (*getNotifyCallback)(uint8_t *data, uint32_t length); */
         std::array<uint8_t, 768> &getReportMap()
         {
             return reportMap;
@@ -171,7 +183,7 @@ private:
 
         bool empty()
         {
-            return occupied;
+            return !occupied;
         }
         
     };

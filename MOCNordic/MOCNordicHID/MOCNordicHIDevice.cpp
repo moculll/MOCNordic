@@ -39,6 +39,11 @@ int MOCNordicHIDevice::deviceUnitInit(uint8_t index, ReportDesc &desc)
                 DEBUG_PRINT("hot enumerating for HID_%d", index);
                 /* deviceUnits[index].reportDesc.insert(desc.data(), desc.size(), ReportDescType::Keyboard); */
                 deviceUnits[index].reportDesc = desc;
+                auto touchpadRec = deviceUnits[index].reportDesc.touchpadRec();
+                if(touchpadRec.isValid()) {
+                    deviceUnits[index].reportDesc.reportContactCnt[0] = touchpadRec.contactCountReportId;
+                    deviceUnits[index].reportDesc.reportContactCnt[1] = touchpadRec.fingerCnt;
+                }
                 usb_hid_register_device(deviceUnits[index].device, deviceUnits[index].reportDesc.data(), deviceUnits[index].reportDesc.size(), &deviceUnits[index].callbacks);
                 
                 err = usb_hid_init(deviceUnits[index].device);
@@ -72,23 +77,20 @@ int MOCNordicHIDevice::deviceUnitInit(uint8_t index, ReportDesc &desc)
     deviceUnits[index].reportDesc = desc;
     deviceUnits[index].device = hid_dev;
     
-    /* deviceUnits[index].callbacks.get_report = [] (const struct device *dev, struct usb_setup_packet *setup, int32_t *len, uint8_t **data) {
-       switch (setup->wValue & 0xFF) {
-
-            case 0x0D:
-                *data = ReportDesc::reportCertIn;
-                *len = sizeof(ReportDesc::reportCertIn);
+    deviceUnits[index].callbacks.get_report = [] (const struct device *dev, struct usb_setup_packet *setup, int32_t *len, uint8_t **data) {
+        uint8_t index = getIndexFromDev(dev);
+        if(deviceUnits[index].reportDesc.getType(0) == ReportDescType::Touchpad) {
+            if((setup->wValue & 0xFF) == deviceUnits[index].reportDesc.reportContactCnt[0]) {
+                *data = deviceUnits[index].reportDesc.reportContactCnt.data();
+                *len = deviceUnits[index].reportDesc.reportContactCnt.size();
                 return 0;
-            
-            
-            case 0x0C:
-                *data = ReportDesc::reportCnt;
-                *len = sizeof(ReportDesc::reportCnt);
-                return 0;
+            }
+ 
         }
+        
         return -ENOTSUP;
         
-    }; */
+    };
 
     /* deviceUnits[index].callbacks.set_report = [] (const struct device *dev, struct usb_setup_packet *setup, int32_t *len, uint8_t **data) {
 
@@ -191,7 +193,10 @@ int MOCNordicHIDevice::init()
     });
 }
 
-    
+void MOCNordicHIDevice::printDesc(uint8_t index)
+{
+    DEBUG_PRINT_HEX("desc", deviceUnits[index].reportDesc.data(), deviceUnits[index].reportDesc.size());
+}
 
 
 } /* MOCNordic */
